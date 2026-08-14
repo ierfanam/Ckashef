@@ -2,86 +2,19 @@ namespace GovernmentMiningApp.Models;
 
 public class GovernmentOperation
 {
-    public string OperationCode { get; set; } = "";
-    public string Region { get; set; } = "";
-    public string AuthorizedBy { get; set; } = "";
-    public DateTime StartTime { get; set; }
-    public DateTime? EndTime { get; set; }
-    public string Status { get; set; } = "InProgress";
-    public string Notes { get; set; } = "";
-    public int DetectionCount { get; set; }
-    public double TotalConsumption { get; set; }
+    public string OperationCode { get; set; } = ""; public string Region { get; set; } = ""; public string AuthorizedBy { get; set; } = ""; public DateTime StartTime { get; set; } public DateTime? EndTime { get; set; } public string Status { get; set; } = "InProgress"; public string Notes { get; set; } = ""; public int DetectionCount { get; set; } public double TotalConsumption { get; set; }
 }
-
 public class DetectedDevice
 {
-    public string OperationID { get; set; } = "";
-    public string OperationCode { get; set; } = "";
-    public string IPAddress { get; set; } = "";
-    public int Port { get; set; }
-    public double? LocationLatitude { get; set; }
-    public double? LocationLongitude { get; set; }
-    public string Province { get; set; } = "";
-    public string City { get; set; } = "";
-    public string Street { get; set; } = "";
-    public string PostalCode { get; set; } = "";
-    public string SubscriberName { get; set; } = "";
-    public string PhoneNumber { get; set; } = "";
-    public string ISP { get; set; } = "";
-    public string OperatorName { get; set; } = "";
-    public string DeviceModel { get; set; } = "";
-    public string HashRate { get; set; } = "";
-    public double EstimatedConsumption { get; set; }
-    public DateTime DetectionTime { get; set; }
-    public string ActionStatus { get; set; } = "منتظر‌دستورالعمل";
-    public string ActionType { get; set; } = "";
-    public string ActionEnforcedBy { get; set; } = "";
-    public string ActionNotes { get; set; } = "";
-    public double Confidence { get; set; }
+    public string OperationID { get; set; } = ""; public string OperationCode { get; set; } = ""; public string IPAddress { get; set; } = ""; public int Port { get; set; } public double? LocationLatitude { get; set; } public double? LocationLongitude { get; set; } public double? LocationAccuracy { get; set; }
+    public string Province { get; set; } = ""; public string City { get; set; } = ""; public string Street { get; set; } = ""; public string PostalCode { get; set; } = ""; public string SubscriberName { get; set; } = ""; public string PhoneNumber { get; set; } = ""; public string ISP { get; set; } = ""; public string OperatorName { get; set; } = "";
+    public string DeviceModel { get; set; } = ""; public string HashRate { get; set; } = ""; public double EstimatedConsumption { get; set; } public DateTime DetectionTime { get; set; } public string ActionStatus { get; set; } = "منتظر‌دستورالعمل"; public string ActionType { get; set; } = ""; public DateTime? ActionTimestamp { get; set; } public string ActionEnforcedBy { get; set; } = ""; public string ActionNotes { get; set; } = ""; public double Confidence { get; set; }
 }
-
 public class Personnel
 {
-    public string PersonnelID { get; set; } = "";
-    public string FullName { get; set; } = "";
-    public string Department { get; set; } = "";
-    public string Role { get; set; } = "";
-    public string Badge { get; set; } = "";
-    public string PhoneNumber { get; set; } = "";
-    public string Email { get; set; } = "";
-    public int AuthorizationLevel { get; set; } = 1;
-    public bool IsActive { get; set; } = true;
-    public DateTime? LastLogin { get; set; }
+    public string PersonnelID { get; set; } = ""; public string FullName { get; set; } = ""; public string Department { get; set; } = ""; public string Role { get; set; } = ""; public string Badge { get; set; } = ""; public string PhoneNumber { get; set; } = ""; public string Email { get; set; } = ""; public int AuthorizationLevel { get; set; } = 1; public bool IsActive { get; set; } = true; public DateTime? LastLogin { get; set; }
 }
-
-public class DashboardStats
-{
-    public int ActiveOperations { get; set; }
-    public int TotalDetections { get; set; }
-    public int PendingActions { get; set; }
-    public int SeizedDevices { get; set; }
-    public double TotalPowerKw { get; set; }
-    public int PersonnelCount { get; set; }
-}
-
-public class MinerProfile
-{
-    public string Key { get; set; } = "";
-    public string Name { get; set; } = "";
-    public string HashRate { get; set; } = "";
-    public double PowerWatts { get; set; }
-}
-
-public class ScanProgressEventArgs : EventArgs
-{
-    public int Percent { get; set; }
-    public string Message { get; set; } = "";
-    public int Found { get; set; }
-    public int Scanned { get; set; }
-}
-
-public static class AppSession
-{
-    public static Personnel? CurrentUser { get; set; }
-    public static bool IsAuthenticated => CurrentUser != null;
-}
+public class DashboardStats { public int ActiveOperations { get; set; } public int TotalDetections { get; set; } public int PendingActions { get; set; } public int SeizedDevices { get; set; } public double TotalPowerKw { get; set; } public int PersonnelCount { get; set; } }
+public class MinerProfile { public string Key { get; set; } = ""; public string Name { get; set; } = ""; public string HashRate { get; set; } = ""; public double PowerWatts { get; set; } }
+public class ScanProgressEventArgs : EventArgs { public int Percent { get; set; } public string Message { get; set; } = ""; public int Found { get; set; } public int Scanned { get; set; } }
+public static class AppSession { public static Personnel? CurrentUser { get; set; } public static bool IsAuthenticated => CurrentUser != null; }
