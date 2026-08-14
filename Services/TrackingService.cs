@@ -6,7 +6,7 @@ namespace GovernmentMiningApp.Services;
 
 /// <summary>
 /// سرویس ردیابی مجاز: فقط اهداف صریحاً واردشده توسط کاربر مجاز اسکن می‌شوند.
-/// حالت شبیه‌سازی برای آموزش و تست بدون اتصال شبکه.
+/// اطلاعات هویتی، نشانی و تلفن هرگز از روی IP حدس یا تولید نمی‌شوند و فقط از منبع رسمی متصل‌شده به سامانه قابل ثبت هستند.
 /// </summary>
 public sealed class TrackingService
 {
@@ -30,20 +30,14 @@ public sealed class TrackingService
         new() { Key = "GPU", Name = "GPU Mining Rig", HashRate = "Variable", PowerWatts = 1500 }
     };
 
-    private static readonly string[] Provinces =
-    {
-        "تهران", "خراسان رضوی", "اصفهان", "فارس", "خوزستان", "آذربایجان شرقی",
-        "مازندران", "کرمان", "گیلان", "البرز", "یزد", "همدان"
-    };
-
-    private static readonly string[] Isps =
-    {
-        "MCI (همراه‌اول)", "ایرانسل", "رایتل", "مخابرات ایران (TCI)", "شاتل", "آسیاتک"
-    };
-
     public event EventHandler<ScanProgressEventArgs>? ProgressChanged;
 
     public TrackingService(DatabaseService db) => _db = db;
+
+    // Compatibility wrapper for the current UI. It deliberately does not fabricate identity data.
+    public Task<List<DetectedDevice>> ScanAsync(string operationCode, IReadOnlyList<string> targetIps, CancellationToken ct = default) =>
+        RunAuthorizedScanAsync(operationCode, "", targetIps, MinerPorts, false,
+            AppSession.CurrentUser?.FullName ?? "سیستم", ct);
 
     public async Task<List<DetectedDevice>> RunAuthorizedScanAsync(
         string operationCode,
@@ -54,10 +48,8 @@ public sealed class TrackingService
         string authorizedBy,
         CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(operationCode))
-            throw new ArgumentException("کد عملیاتی الزامی است.");
-        if (targetIps.Count == 0 && !simulationMode)
-            throw new ArgumentException("لیست IP هدف خالی است. برای اسکن واقعی حداقل یک IP وارد کنید.");
+        if (string.IsNullOrWhiteSpace(operationCode)) throw new ArgumentException("کد عملیاتی الزامی است.");
+        if (targetIps.Count == 0 && !simulationMode) throw new ArgumentException("لیست IP هدف خالی است.");
 
         var start = DateTime.Now;
         var found = new List<DetectedDevice>();
@@ -69,48 +61,37 @@ public sealed class TrackingService
             var simCount = rnd.Next(3, 12);
             for (int i = 0; i < simCount; i++)
             {
-                ct.ThrowIfCancellationRequested();
-                await Task.Delay(180, ct);
+                ct.ThrowIfCancellationRequested(); await Task.Delay(180, ct);
                 var miner = KnownMiners[rnd.Next(KnownMiners.Length)];
-                var device = BuildDevice(operationCode, region, SimulateIp(rnd), portsToUse[rnd.Next(portsToUse.Length)], miner, rnd, 0.72 + rnd.NextDouble() * 0.25);
-                found.Add(device);
-                _db.SaveDetection(device);
-                Report(i + 1, simCount, found.Count, $"شبیه‌سازی شناسایی {device.IPAddress}:{device.Port}");
+                var device = BuildDevice(operationCode, region, $"SIM-{i + 1:000}", portsToUse[rnd.Next(portsToUse.Length)], miner, rnd, 0.72 + rnd.NextDouble() * 0.25, true);
+                found.Add(device); _db.SaveDetection(device); Report(i + 1, simCount, found.Count, $"شبیه‌سازی شناسایی {device.IPAddress}");
             }
         }
         else
         {
-            int total = targetIps.Count * portsToUse.Length;
-            int scanned = 0;
+            int total = targetIps.Count * portsToUse.Length, scanned = 0;
             foreach (var ip in targetIps)
             {
                 ct.ThrowIfCancellationRequested();
                 if (!IsValidIp(ip)) { scanned += portsToUse.Length; continue; }
-
                 foreach (var port in portsToUse)
                 {
-                    ct.ThrowIfCancellationRequested();
-                    scanned++;
-                    var open = await IsPortOpenAsync(ip, port, 600, ct);
-                    if (open)
+                    ct.ThrowIfCancellationRequested(); scanned++;
+                    if (await IsPortOpenAsync(ip, port, 600, ct))
                     {
                         var miner = GuessMiner(port, rnd);
-                        var conf = 0.55 + rnd.NextDouble() * 0.35;
-                        var device = BuildDevice(operationCode, region, ip, port, miner, rnd, conf);
-                        found.Add(device);
-                        _db.SaveDetection(device);
+                        var device = BuildDevice(operationCode, region, ip, port, miner, rnd, 0.55 + rnd.NextDouble() * 0.35, false);
+                        found.Add(device); _db.SaveDetection(device);
                     }
-                    if (scanned % 3 == 0 || scanned == total)
-                        Report(scanned, total, found.Count, $"بررسی {ip}:{port}");
+                    if (scanned % 3 == 0 || scanned == total) Report(scanned, total, found.Count, $"بررسی {ip}:{port}");
                 }
             }
         }
 
         var end = DateTime.Now;
-        _db.SaveScanHistory(operationCode, simulationMode ? "Simulation" : "AuthorizedScan",
-            start, end, simulationMode ? found.Count : targetIps.Count * portsToUse.Length, found.Count,
-            $"مجاز‌کننده: {authorizedBy} | منطقه: {region}");
-
+        _db.SaveScanHistory(operationCode, simulationMode ? "Simulation" : "AuthorizedScan", start, end,
+            simulationMode ? found.Count : targetIps.Count * portsToUse.Length, found.Count,
+            $"مجازکننده: {authorizedBy} | منطقه: {region}");
         Report(100, 100, found.Count, "اسکن تکمیل شد");
         return found;
     }
@@ -118,40 +99,22 @@ public sealed class TrackingService
     public async Task<List<DetectedDevice>> QuickLocalProbeAsync(string operationCode, string region, CancellationToken ct = default)
     {
         var localIps = GetLocalIpv4Addresses();
-        if (localIps.Count == 0)
-            localIps.Add("127.0.0.1");
-
-        // فقط چند پورت رایج روی آدرس‌های محلی همین سیستم — بدون اسکن شبکه خارجی
         var ports = new[] { 3333, 4028, 8333, 9332, 8080 };
         return await RunAuthorizedScanAsync(operationCode, region, localIps, ports, false,
             AppSession.CurrentUser?.FullName ?? "سیستم", ct);
     }
 
-    private DetectedDevice BuildDevice(string opCode, string region, string ip, int port, MinerProfile miner, Random rnd, double conf)
+    private DetectedDevice BuildDevice(string opCode, string region, string ip, int port, MinerProfile miner, Random rnd, double conf, bool simulation)
     {
-        var prov = string.IsNullOrWhiteSpace(region) ? Provinces[rnd.Next(Provinces.Length)] : region;
         return new DetectedDevice
         {
-            OperationID = Guid.NewGuid().ToString("N"),
-            OperationCode = opCode,
-            IPAddress = ip,
-            Port = port,
-            LocationLatitude = 32.0 + rnd.NextDouble() * 5,
-            LocationLongitude = 48.0 + rnd.NextDouble() * 8,
-            Province = prov,
-            City = prov == "تهران" ? "تهران" : "مرکز استان",
-            Street = $"خیابان نمونه {rnd.Next(1, 200)}",
-            PostalCode = rnd.Next(100000000, 999999999).ToString(),
-            SubscriberName = $"مشترک-{rnd.Next(1000, 9999)}",
-            PhoneNumber = $"09{rnd.Next(10, 39)}{rnd.Next(10000000, 99999999)}",
-            ISP = Isps[rnd.Next(Isps.Length)],
-            OperatorName = Isps[rnd.Next(Isps.Length)],
-            DeviceModel = miner.Name,
-            HashRate = miner.HashRate,
-            EstimatedConsumption = miner.PowerWatts,
-            DetectionTime = DateTime.Now,
-            ActionStatus = "منتظر‌دستورالعمل",
-            Confidence = Math.Round(conf, 2)
+            OperationID = Guid.NewGuid().ToString("N"), OperationCode = opCode, IPAddress = ip, Port = port,
+            // Location and subscriber identity are intentionally left empty until an authorized official source supplies them.
+            Province = region ?? "", City = "", Street = "", PostalCode = "", SubscriberName = "", PhoneNumber = "",
+            ISP = "", OperatorName = "", DeviceModel = miner.Name, HashRate = miner.HashRate,
+            EstimatedConsumption = miner.PowerWatts, DetectionTime = DateTime.Now,
+            ActionStatus = "منتظر‌دستورالعمل", Confidence = Math.Round(conf, 2),
+            ActionNotes = simulation ? "داده آزمایشی؛ فاقد اطلاعات هویتی واقعی" : "اطلاعات هویتی از منبع رسمی ثبت نشده است"
         };
     }
 
@@ -163,27 +126,12 @@ public sealed class TrackingService
         return KnownMiners[rnd.Next(KnownMiners.Length)];
     }
 
-    private static string SimulateIp(Random rnd) =>
-        $"{rnd.Next(1, 223)}.{rnd.Next(0, 255)}.{rnd.Next(0, 255)}.{rnd.Next(1, 254)}";
-
-    private static bool IsValidIp(string ip) =>
-        System.Net.IPAddress.TryParse(ip.Trim(), out var addr) &&
-        addr.AddressFamily == AddressFamily.InterNetwork;
+    private static bool IsValidIp(string ip) => System.Net.IPAddress.TryParse(ip.Trim(), out var addr) && addr.AddressFamily == AddressFamily.InterNetwork;
 
     private static async Task<bool> IsPortOpenAsync(string ip, int port, int timeoutMs, CancellationToken ct)
     {
-        try
-        {
-            using var client = new TcpClient();
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            linked.CancelAfter(timeoutMs);
-            await client.ConnectAsync(ip, port, linked.Token);
-            return client.Connected;
-        }
-        catch
-        {
-            return false;
-        }
+        try { using var client = new TcpClient(); using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct); linked.CancelAfter(timeoutMs); await client.ConnectAsync(ip, port, linked.Token); return client.Connected; }
+        catch { return false; }
     }
 
     private static List<string> GetLocalIpv4Addresses()
@@ -195,28 +143,16 @@ public sealed class TrackingService
             {
                 if (ni.OperationalStatus != OperationalStatus.Up) continue;
                 foreach (var ua in ni.GetIPProperties().UnicastAddresses)
-                {
-                    if (ua.Address.AddressFamily == AddressFamily.InterNetwork)
-                    {
-                        var s = ua.Address.ToString();
-                        if (!list.Contains(s)) list.Add(s);
-                    }
-                }
+                    if (ua.Address.AddressFamily == AddressFamily.InterNetwork && !list.Contains(ua.Address.ToString())) list.Add(ua.Address.ToString());
             }
         }
-        catch { /* ignore */ }
+        catch { }
         return list;
     }
 
     private void Report(int current, int total, int found, string message)
     {
         var pct = total <= 0 ? 0 : (int)Math.Min(100, current * 100.0 / total);
-        ProgressChanged?.Invoke(this, new ScanProgressEventArgs
-        {
-            Percent = pct,
-            Message = message,
-            Found = found,
-            Scanned = current
-        });
+        ProgressChanged?.Invoke(this, new ScanProgressEventArgs { Percent = pct, Message = message, Found = found, Scanned = current });
     }
 }
