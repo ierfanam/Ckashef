@@ -1,0 +1,22 @@
+name: Windows Build
+
+on:
+  push:
+    branches: [ main, 'upgrade/**' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore
+        run: dotnet restore GovernmentMiningApp.csproj
+      - name: Build
+        run: dotnet build GovernmentMiningApp.csproj --configuration Release --no-restore
