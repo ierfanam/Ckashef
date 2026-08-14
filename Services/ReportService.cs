@@ -47,8 +47,11 @@ public sealed class ReportService
         foreach (var d in detections)
         {
             sb.AppendLine($"• {d.IPAddress}:{d.Port} | {d.DeviceModel} | {d.EstimatedConsumption:F0}W");
-            sb.AppendLine($"  استان/شهر: {d.Province} / {d.City}");
-            sb.AppendLine($"  مشترک: {d.SubscriberName} | تلفن: {d.PhoneNumber} | ISP: {d.ISP}");
+            sb.AppendLine($"  نشانی: {d.Province} / {d.City} / {d.Street}");
+            sb.AppendLine($"  کدپستی: {d.PostalCode}");
+            sb.AppendLine($"  مشترک: {d.SubscriberName} | تلفن: {d.PhoneNumber}");
+            sb.AppendLine($"  اپراتور/ISP: {d.OperatorName} / {d.ISP}");
+            sb.AppendLine($"  مختصات: {FormatCoordinate(d.LocationLatitude)} , {FormatCoordinate(d.LocationLongitude)}");
             sb.AppendLine($"  وضعیت اقدام: {d.ActionStatus} | اطمینان: {d.Confidence:P0}");
             sb.AppendLine($"  زمان شناسایی: {d.DetectionTime:yyyy-MM-dd HH:mm:ss}");
             sb.AppendLine();
@@ -65,8 +68,7 @@ public sealed class ReportService
 
         File.WriteAllText(path, sb.ToString(), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
 
-        var id = Guid.NewGuid().ToString("N");
-        _db.SaveReportMeta(id, operationCode, "Text", generatedBy, path, detections.Count,
+        _db.SaveReportMeta(Guid.NewGuid().ToString("N"), operationCode, "Text", generatedBy, path, detections.Count,
             detections.Sum(d => d.EstimatedConsumption));
 
         return path;
@@ -80,14 +82,16 @@ public sealed class ReportService
         var detections = _db.GetDetections(operationCode);
 
         var sb = new StringBuilder();
-        sb.AppendLine("OperationID,OperationCode,IP,Port,Model,PowerW,Province,City,Subscriber,Phone,ISP,Status,Confidence,DetectionTime");
+        sb.AppendLine("OperationID,OperationCode,IP,Port,Model,PowerW,Province,City,Street,PostalCode,Subscriber,Phone,ISP,Operator,Latitude,Longitude,Status,Confidence,DetectionTime");
         foreach (var d in detections)
         {
             sb.AppendLine(string.Join(",",
                 Csv(d.OperationID), Csv(d.OperationCode), Csv(d.IPAddress), d.Port,
                 Csv(d.DeviceModel), d.EstimatedConsumption.ToString("F0"),
-                Csv(d.Province), Csv(d.City), Csv(d.SubscriberName), Csv(d.PhoneNumber),
-                Csv(d.ISP), Csv(d.ActionStatus), d.Confidence.ToString("F2"),
+                Csv(d.Province), Csv(d.City), Csv(d.Street), Csv(d.PostalCode),
+                Csv(d.SubscriberName), Csv(d.PhoneNumber), Csv(d.ISP), Csv(d.OperatorName),
+                Csv(FormatCoordinate(d.LocationLatitude)), Csv(FormatCoordinate(d.LocationLongitude)),
+                Csv(d.ActionStatus), d.Confidence.ToString("F2"),
                 Csv(d.DetectionTime.ToString("yyyy-MM-dd HH:mm:ss"))));
         }
         File.WriteAllText(path, sb.ToString(), new UTF8Encoding(true));
@@ -96,10 +100,12 @@ public sealed class ReportService
         return path;
     }
 
+    private static string FormatCoordinate(double? value) => value?.ToString("F6") ?? "";
+
     private static string Csv(string? s)
     {
         s ??= "";
-        if (s.Contains(',') || s.Contains('"') || s.Contains('\n'))
+        if (s.Contains(',') || s.Contains('"') || s.Contains('\n') || s.Contains('\r'))
             return "\"" + s.Replace("\"", "\"\"") + "\"";
         return s;
     }
