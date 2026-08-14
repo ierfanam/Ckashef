@@ -19,10 +19,8 @@ static class Program
             db.Initialize();
             using var login = new LoginForm(db);
             UiTheme.ApplyWindow(login);
-            if (login.ShowDialog() != DialogResult.OK) { db.Dispose(); return; }
-            using var main = new MainForm(db);
-            Application.Run(main);
-            db.Dispose();
+            if (login.ShowDialog() != DialogResult.OK) return;
+            Application.Run(new MainForm(db));
         }
         catch (Exception ex) { ShowError(ex); }
     }
