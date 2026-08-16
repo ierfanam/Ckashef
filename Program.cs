@@ -17,6 +17,7 @@ static class Program
         {
             var db = new DatabaseService();
             db.Initialize();
+            ProductionDataSanitizer.Apply(db);
             using var login = new LoginForm(db);
             UiTheme.ApplyWindow(login);
             if (login.ShowDialog() != DialogResult.OK) return;
