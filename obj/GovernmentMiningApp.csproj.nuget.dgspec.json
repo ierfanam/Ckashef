@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "F:\\1\\CLAUDE%100_KASHEF\\GovernmentMiningApp\\GovernmentMiningApp.csproj": {}
+    "/workspace/83784cfc-6f25-4906-bb72-b4391899c2cd/sessions/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/GovernmentMiningApp.csproj": {}
   },
   "projects": {
-    "F:\\1\\CLAUDE%100_KASHEF\\GovernmentMiningApp\\GovernmentMiningApp.csproj": {
-      "version": "1.0.0",
+    "/workspace/83784cfc-6f25-4906-bb72-b4391899c2cd/sessions/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/GovernmentMiningApp.csproj": {
+      "version": "2.0.0",
       "restore": {
-        "projectUniqueName": "F:\\1\\CLAUDE%100_KASHEF\\GovernmentMiningApp\\GovernmentMiningApp.csproj",
-        "projectName": "برنامه قانونی و مجوزدار سفارشی دولت",
-        "projectPath": "F:\\1\\CLAUDE%100_KASHEF\\GovernmentMiningApp\\GovernmentMiningApp.csproj",
-        "packagesPath": "I:\\Users\\Admin\\.nuget\\packages\\",
-        "outputPath": "F:\\1\\CLAUDE%100_KASHEF\\GovernmentMiningApp\\obj\\",
+        "projectUniqueName": "/workspace/83784cfc-6f25-4906-bb72-b4391899c2cd/sessions/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/GovernmentMiningApp.csproj",
+        "projectName": "سامانه ردیابی دستگاه‌های ماینر",
+        "projectPath": "/workspace/83784cfc-6f25-4906-bb72-b4391899c2cd/sessions/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/GovernmentMiningApp.csproj",
+        "packagesPath": "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/",
+        "outputPath": "/workspace/83784cfc-6f25-4906-bb72-b4391899c2cd/sessions/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "I:\\Users\\Admin\\AppData\\Roaming\\NuGet\\NuGet.Config"
+          "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/NuGet/NuGet.Config"
         ],
         "originalTargetFrameworks": [
           "net8.0-windows"
@@ -42,6 +42,12 @@
       "frameworks": {
         "net8.0-windows7.0": {
           "targetAlias": "net8.0-windows",
+          "dependencies": {
+            "Microsoft.Data.Sqlite": {
+              "target": "Package",
+              "version": "[8.0.11, )"
+            }
+          },
           "imports": [
             "net461",
             "net462",
@@ -53,7 +59,21 @@
           ],
           "assetTargetFallback": true,
           "warn": true,
-          "runtimeIdentifierGraphPath": "I:\\Program Files\\dotnet\\sdk\\8.0.416/PortableRuntimeIdentifierGraph.json"
+          "downloadDependencies": [
+            {
+              "name": "Microsoft.WindowsDesktop.App.Ref",
+              "version": "[8.0.31, 8.0.31]"
+            }
+          ],
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            },
+            "Microsoft.WindowsDesktop.App.WindowsForms": {
+              "privateAssets": "none"
+            }
+          },
+          "runtimeIdentifierGraphPath": "/tmp/dotnet-sdk/sdk/8.0.425/PortableRuntimeIdentifierGraph.json"
         }
       }
     }

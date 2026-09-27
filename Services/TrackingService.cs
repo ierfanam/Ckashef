@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using GovernmentMiningApp.Models;
@@ -5,188 +7,447 @@ using GovernmentMiningApp.Models;
 namespace GovernmentMiningApp.Services;
 
 /// <summary>
-/// سرویس ردیابی مجاز: فقط اهداف صریحاً واردشده توسط کاربر مجاز اسکن می‌شوند.
-/// حالت شبیه‌سازی برای آموزش و تست بدون اتصال شبکه.
+/// اجرای پروب واقعی روی اهداف صریحاً اعلام‌شده.
+/// هیچ حالت شبیه‌سازی در این سرویس وجود ندارد؛ تمام نتایج از اتصال واقعی TCP
+/// و از پاسخ واقعی خود دستگاه به دست می‌آید.
 /// </summary>
 public sealed class TrackingService
 {
-    private readonly DatabaseService _db;
-
-    public static readonly int[] MinerPorts =
+    /// <summary>پورت‌های متداول سرویس‌های مدیریتی و استخر ماینر.</summary>
+    public static readonly int[] DefaultMinerPorts =
     {
         3333, 4028, 4444, 5555, 7777, 8008, 8080, 8333, 8443, 8545,
         8888, 9332, 9333, 9999, 14433, 14444, 18080, 19332, 19333
     };
 
-    public static readonly MinerProfile[] KnownMiners =
-    {
-        new() { Key = "S19Pro", Name = "Antminer S19 Pro", HashRate = "110TH/s", PowerWatts = 1450 },
-        new() { Key = "S19", Name = "Antminer S19", HashRate = "95TH/s", PowerWatts = 1326 },
-        new() { Key = "L7", Name = "Antminer L7", HashRate = "9.5GH/s", PowerWatts = 3425 },
-        new() { Key = "M50", Name = "Whatsminer M50", HashRate = "112TH/s", PowerWatts = 3418 },
-        new() { Key = "A1366", Name = "Canaan A1366", HashRate = "70TH/s", PowerWatts = 3250 },
-        new() { Key = "KAS", Name = "IceRiver KAS", HashRate = "4.7PH/s", PowerWatts = 3600 },
-        new() { Key = "E9", Name = "Antminer E9", HashRate = "2.4GH/s", PowerWatts = 2400 },
-        new() { Key = "GPU", Name = "GPU Mining Rig", HashRate = "Variable", PowerWatts = 1500 }
-    };
+    public const int MaxTargets = 4096;
+    public const int MaxProbes = 120_000;
 
-    private static readonly string[] Provinces =
-    {
-        "تهران", "خراسان رضوی", "اصفهان", "فارس", "خوزستان", "آذربایجان شرقی",
-        "مازندران", "کرمان", "گیلان", "البرز", "یزد", "همدان"
-    };
-
-    private static readonly string[] Isps =
-    {
-        "MCI (همراه‌اول)", "ایرانسل", "رایتل", "مخابرات ایران (TCI)", "شاتل", "آسیاتک"
-    };
+    private readonly DatabaseService _db;
+    private readonly MinerFingerprintService _fingerprint = new();
+    private readonly NetworkIntelService _intel;
 
     public event EventHandler<ScanProgressEventArgs>? ProgressChanged;
 
-    public TrackingService(DatabaseService db) => _db = db;
-
-    public async Task<List<DetectedDevice>> RunAuthorizedScanAsync(
-        string operationCode,
-        string region,
-        IReadOnlyList<string> targetIps,
-        IReadOnlyList<int> ports,
-        bool simulationMode,
-        string authorizedBy,
-        CancellationToken ct = default)
+    public TrackingService(DatabaseService db)
     {
-        if (string.IsNullOrWhiteSpace(operationCode))
-            throw new ArgumentException("کد عملیاتی الزامی است.");
-        if (targetIps.Count == 0 && !simulationMode)
-            throw new ArgumentException("لیست IP هدف خالی است. برای اسکن واقعی حداقل یک IP وارد کنید.");
+        _db = db;
+        _intel = new NetworkIntelService(db);
+    }
 
-        var start = DateTime.Now;
-        var found = new List<DetectedDevice>();
-        var portsToUse = ports.Count > 0 ? ports.ToArray() : MinerPorts;
-        var rnd = new Random();
+    public async Task<ScanOutcome> RunAuthorizedScanAsync(ScanRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.OperationCode))
+            throw new ArgumentException("کد عملیات الزامی است.");
+        if (request.Targets.Count == 0)
+            throw new ArgumentException("هیچ هدفی اعلام نشده است.");
 
-        if (simulationMode)
-        {
-            var simCount = rnd.Next(3, 12);
-            for (int i = 0; i < simCount; i++)
+        var startedAt = DateTime.Now;
+        var sw = Stopwatch.StartNew();
+
+        var ips = ExpandTargets(request.Targets, out var warnings);
+        if (ips.Count == 0)
+            throw new ArgumentException("هیچ آدرس IPv4 معتبری در فهرست اهداف یافت نشد.");
+
+        var ports = request.Ports.Count > 0
+            ? request.Ports.Distinct().OrderBy(p => p).ToArray()
+            : DefaultMinerPorts;
+
+        var totalProbes = (long)ips.Count * ports.Length;
+        if (totalProbes > MaxProbes)
+            throw new ArgumentException(
+                $"حجم پروب {totalProbes} مورد بیش از حد مجاز ({MaxProbes}) است؛ محدوده را محدودتر کنید.");
+
+        var scanId = Guid.NewGuid().ToString("N");
+        var machine = Environment.MachineName;
+        var authorizedBy = request.AuthorizedBy;
+
+        _db.WriteAudit(authorizedBy, AppSession.CurrentUser?.Badge ?? "-", "ScanStarted", "ScanHistory",
+            scanId,
+            $"عملیات: {request.OperationCode} | منطقه: {request.Region} | اهداف: {ips.Count} | " +
+            $"پورت‌ها: {ports.Length} | حداکثر موازی: {request.MaxParallel} | رایانه: {machine}" +
+            (warnings.Count > 0 ? " | هشدار: " + string.Join(" | ", warnings) : ""));
+
+        int probed = 0, open = 0, closed = 0, filtered = 0, identified = 0, errors = 0;
+        var evidences = new List<ProbeEvidence>();
+        var evidenceGate = new SemaphoreSlim(1);
+        int lastReported = -1;
+
+        Report(0, (int)totalProbes, 0, 0, sw.Elapsed.TotalSeconds,
+            $"آغاز پروب {ips.Count} هدف روی {ports.Length} پورت");
+
+        var work = new List<(string Ip, int Port)>(checked((int)totalProbes));
+        foreach (var ip in ips)
+            foreach (var port in ports)
+                work.Add((ip, port));
+
+        var arp = request.LookUpLocalMac ? ArpTable.BuildMap() : new Dictionary<string, ArpEntry>();
+
+        await Parallel.ForEachAsync(work,
+            new ParallelOptions
             {
-                ct.ThrowIfCancellationRequested();
-                await Task.Delay(180, ct);
-                var miner = KnownMiners[rnd.Next(KnownMiners.Length)];
-                var device = BuildDevice(operationCode, region, SimulateIp(rnd), portsToUse[rnd.Next(portsToUse.Length)], miner, rnd, 0.72 + rnd.NextDouble() * 0.25);
-                found.Add(device);
-                _db.SaveDetection(device);
-                Report(i + 1, simCount, found.Count, $"شبیه‌سازی شناسایی {device.IPAddress}:{device.Port}");
-            }
-        }
-        else
-        {
-            int total = targetIps.Count * portsToUse.Length;
-            int scanned = 0;
-            foreach (var ip in targetIps)
+                MaxDegreeOfParallelism = Math.Clamp(request.MaxParallel, 1, 256),
+                CancellationToken = ct
+            },
+            async (item, token) =>
             {
-                ct.ThrowIfCancellationRequested();
-                if (!IsValidIp(ip)) { scanned += portsToUse.Length; continue; }
+                var ev = await _fingerprint.ProbeAsync(item.Ip, item.Port, request.ConnectTimeoutMs, token)
+                    .ConfigureAwait(false);
 
-                foreach (var port in portsToUse)
+                int done = Interlocked.Increment(ref probed);
+                switch (ev.PortState)
                 {
-                    ct.ThrowIfCancellationRequested();
-                    scanned++;
-                    var open = await IsPortOpenAsync(ip, port, 600, ct);
-                    if (open)
-                    {
-                        var miner = GuessMiner(port, rnd);
-                        var conf = 0.55 + rnd.NextDouble() * 0.35;
-                        var device = BuildDevice(operationCode, region, ip, port, miner, rnd, conf);
-                        found.Add(device);
-                        _db.SaveDetection(device);
-                    }
-                    if (scanned % 3 == 0 || scanned == total)
-                        Report(scanned, total, found.Count, $"بررسی {ip}:{port}");
+                    case PortStates.Open:
+                        Interlocked.Increment(ref open);
+                        if (ev.SoftwareName != "" || ev.DeviceModel != "") Interlocked.Increment(ref identified);
+                        await evidenceGate.WaitAsync(token).ConfigureAwait(false);
+                        try { evidences.Add(ev); }
+                        finally { evidenceGate.Release(); }
+                        break;
+                    case PortStates.Closed:
+                        Interlocked.Increment(ref closed);
+                        break;
+                    case PortStates.Error:
+                        Interlocked.Increment(ref errors);
+                        break;
+                    default:
+                        Interlocked.Increment(ref filtered);
+                        break;
                 }
-            }
+
+                int step = (int)Math.Max(1, totalProbes / 100);
+                if (done % step == 0 || done == totalProbes)
+                {
+                    int snapshot = Volatile.Read(ref open);
+                    if (done != lastReported)
+                    {
+                        lastReported = done;
+                        Report(done, (int)totalProbes, snapshot, Volatile.Read(ref identified),
+                            sw.Elapsed.TotalSeconds, $"پروب {item.Ip}:{item.Port} — یافته: {snapshot}");
+                    }
+                }
+            }).ConfigureAwait(false);
+
+        int intelFailures = 0;
+        var devices = new List<DetectedDevice>(evidences.Count);
+        int intelDone = 0;
+        foreach (var ev in evidences)
+        {
+            ct.ThrowIfCancellationRequested();
+            var device = await BuildDeviceAsync(request, scanId, ev, arp).ConfigureAwait(false);
+            if (device == null) continue;
+            if (request.ResolveNetworkOwner && device.IntelSource != "موفق") intelFailures++;
+            devices.Add(device);
+            intelDone++;
+            Report(probed, (int)totalProbes, devices.Count, identified, sw.Elapsed.TotalSeconds,
+                $"تکمیل استعلام شبکه {intelDone}/{evidences.Count}");
         }
 
-        var end = DateTime.Now;
-        _db.SaveScanHistory(operationCode, simulationMode ? "Simulation" : "AuthorizedScan",
-            start, end, simulationMode ? found.Count : targetIps.Count * portsToUse.Length, found.Count,
-            $"مجاز‌کننده: {authorizedBy} | منطقه: {region}");
+        foreach (var device in devices)
+            _db.SaveDetection(device);
 
-        Report(100, 100, found.Count, "اسکن تکمیل شد");
-        return found;
-    }
+        sw.Stop();
+        var endedAt = DateTime.Now;
 
-    public async Task<List<DetectedDevice>> QuickLocalProbeAsync(string operationCode, string region, CancellationToken ct = default)
-    {
-        var localIps = GetLocalIpv4Addresses();
-        if (localIps.Count == 0)
-            localIps.Add("127.0.0.1");
-
-        // فقط چند پورت رایج روی آدرس‌های محلی همین سیستم — بدون اسکن شبکه خارجی
-        var ports = new[] { 3333, 4028, 8333, 9332, 8080 };
-        return await RunAuthorizedScanAsync(operationCode, region, localIps, ports, false,
-            AppSession.CurrentUser?.FullName ?? "سیستم", ct);
-    }
-
-    private DetectedDevice BuildDevice(string opCode, string region, string ip, int port, MinerProfile miner, Random rnd, double conf)
-    {
-        var prov = string.IsNullOrWhiteSpace(region) ? Provinces[rnd.Next(Provinces.Length)] : region;
-        return new DetectedDevice
+        var entry = new ScanHistoryEntry
         {
-            OperationID = Guid.NewGuid().ToString("N"),
-            OperationCode = opCode,
-            IPAddress = ip,
-            Port = port,
-            LocationLatitude = 32.0 + rnd.NextDouble() * 5,
-            LocationLongitude = 48.0 + rnd.NextDouble() * 8,
-            Province = prov,
-            City = prov == "تهران" ? "تهران" : "مرکز استان",
-            Street = $"خیابان نمونه {rnd.Next(1, 200)}",
-            PostalCode = rnd.Next(100000000, 999999999).ToString(),
-            SubscriberName = $"مشترک-{rnd.Next(1000, 9999)}",
-            PhoneNumber = $"09{rnd.Next(10, 39)}{rnd.Next(10000000, 99999999)}",
-            ISP = Isps[rnd.Next(Isps.Length)],
-            OperatorName = Isps[rnd.Next(Isps.Length)],
-            DeviceModel = miner.Name,
-            HashRate = miner.HashRate,
-            EstimatedConsumption = miner.PowerWatts,
-            DetectionTime = DateTime.Now,
-            ActionStatus = "منتظر‌دستورالعمل",
-            Confidence = Math.Round(conf, 2)
+            ScanID = scanId,
+            OperationCode = request.OperationCode,
+            ScanType = "TCP-Probe",
+            OperatorName = authorizedBy,
+            MachineName = machine,
+            StartTime = startedAt,
+            EndTime = endedAt,
+            IPsScanned = ips.Count,
+            PortsProbed = (int)totalProbes,
+            DevicesFound = devices.Count,
+            IdentifiedDevices = identified,
+            ClosedPorts = closed,
+            FilteredPorts = filtered,
+            ElapsedSeconds = Math.Round(sw.Elapsed.TotalSeconds, 2),
+            Notes = BuildScanNotes(ips.Count, ports.Length, closed, filtered, errors, intelFailures, warnings)
+        };
+        _db.SaveScanHistory(entry);
+
+        _db.WriteAudit(authorizedBy, AppSession.CurrentUser?.Badge ?? "-", "ScanCompleted", "ScanHistory",
+            scanId,
+            $"پورت‌های باز: {devices.Count} | شناسایی‌شده: {identified} | بسته: {closed} | " +
+            $"فیلترشده: {filtered} | مدت: {entry.ElapsedSeconds} ثانیه");
+
+        Report((int)totalProbes, (int)totalProbes, devices.Count, identified, sw.Elapsed.TotalSeconds,
+            "پایان پروب");
+
+        return new ScanOutcome
+        {
+            ScanID = scanId,
+            TargetsExpanded = ips.Count,
+            PortsProbed = (int)totalProbes,
+            OpenPorts = devices.Count,
+            Identified = identified,
+            ClosedPorts = closed,
+            FilteredPorts = filtered,
+            IntelFailures = intelFailures,
+            ElapsedSeconds = entry.ElapsedSeconds,
+            StartedAt = startedAt,
+            EndedAt = endedAt,
+            Devices = devices
         };
     }
 
-    private static MinerProfile GuessMiner(int port, Random rnd)
+    /// <summary>پروب مجدد یک شناسایی ثبت‌شده و به‌روزرسانی وضعیت «آخرین مشاهده».</summary>
+    public async Task<DetectedDevice?> RefreshDetectionAsync(string operationId, CancellationToken ct)
     {
-        if (port is 3333 or 14433) return KnownMiners[0];
-        if (port is 4028) return KnownMiners[1];
-        if (port is 8545) return KnownMiners[6];
-        return KnownMiners[rnd.Next(KnownMiners.Length)];
+        var existing = _db.GetDetection(operationId);
+        if (existing == null) return null;
+
+        var ev = await _fingerprint.ProbeAsync(existing.IPAddress, existing.Port, 1500, ct)
+            .ConfigureAwait(false);
+
+        if (ev.PortState != PortStates.Open)
+        {
+            _db.WriteAudit("RefreshProbe", "DetectedOperations", operationId,
+                $"پورت دیگر باز نیست: {existing.IPAddress}:{existing.Port} ({ev.PortState}) — {ev.Error}");
+            return null;
+        }
+
+        var request = new ScanRequest
+        {
+            OperationCode = existing.OperationCode,
+            Region = existing.Province,
+            AuthorizedBy = AppSession.CurrentUser?.FullName ?? "سیستم",
+            LookUpLocalMac = true
+        };
+        var arp = ArpTable.BuildMap();
+        var device = await BuildDeviceAsync(request, existing.ScanID, ev, arp).ConfigureAwait(false);
+        if (device == null) return null;
+
+        device.OperationID = existing.OperationID;
+        device.ActionStatus = existing.ActionStatus;
+        device.ActionType = existing.ActionType;
+        device.ActionEnforcedBy = existing.ActionEnforcedBy;
+        device.ActionNotes = existing.ActionNotes;
+        device.OperatorRecordID = existing.OperatorRecordID;
+        device.Province = existing.Province;
+        device.City = existing.City;
+        device.Street = existing.Street;
+        device.PostalCode = existing.PostalCode;
+        device.SubscriberName = existing.SubscriberName;
+        device.PhoneNumber = existing.PhoneNumber;
+        device.DetectionTime = existing.DetectionTime;
+        _db.SaveDetection(device);
+
+        _db.WriteAudit("DetectionRefreshed", "DetectedOperations", operationId,
+            $"{existing.IPAddress}:{existing.Port} — وضعیت: {ev.PortState} | اطمینان: {ev.Confidence:F2}");
+        return device;
     }
 
-    private static string SimulateIp(Random rnd) =>
-        $"{rnd.Next(1, 223)}.{rnd.Next(0, 255)}.{rnd.Next(0, 255)}.{rnd.Next(1, 254)}";
-
-    private static bool IsValidIp(string ip) =>
-        System.Net.IPAddress.TryParse(ip.Trim(), out var addr) &&
-        addr.AddressFamily == AddressFamily.InterNetwork;
-
-    private static async Task<bool> IsPortOpenAsync(string ip, int port, int timeoutMs, CancellationToken ct)
+    private async Task<DetectedDevice?> BuildDeviceAsync(
+        ScanRequest request, string scanId, ProbeEvidence ev, Dictionary<string, ArpEntry> arp)
     {
+        if (ev.PortState != PortStates.Open) return null;
+
+        var device = new DetectedDevice
+        {
+            OperationID = Guid.NewGuid().ToString("N"),
+            OperationCode = request.OperationCode,
+            ScanID = scanId,
+            IPAddress = ev.IpAddress,
+            Port = ev.Port,
+            PortState = ev.PortState,
+            Protocol = ev.Protocol,
+            DetectionMethod = ev.DetectionMethod,
+            LatencyMs = ev.LatencyMs,
+            HttpStatus = ev.HttpStatus,
+            EvidenceHash = ev.EvidenceHash,
+            EvidenceSummary = ev.EvidenceSummary,
+            BannerText = ev.BannerText,
+            SoftwareName = ev.SoftwareName,
+            DeviceModel = ev.DeviceModel,
+            FirmwareVersion = ev.FirmwareVersion,
+            HashRate = ev.HashRate,
+            TemperatureC = ev.TemperatureC,
+            FanPercent = ev.FanPercent,
+            PowerWatts = ev.PowerWatts,
+            PowerSource = ev.PowerWatts.HasValue ? ev.PowerSource : "اعلام‌نشده توسط دستگاه",
+            UptimeSeconds = ev.UptimeSeconds,
+            PoolAddress = ev.PoolAddress,
+            WorkerName = ev.WorkerName,
+            Confidence = Math.Round(ev.Confidence, 2),
+            DetectionTime = DateTime.Now,
+            ActionStatus = "منتظر دستور"
+        };
+
+        if (arp.TryGetValue(ev.IpAddress, out var arpEntry))
+        {
+            device.MacAddress = arpEntry.MacAddress;
+            device.EvidenceSummary += $" | MAC: {arpEntry.MacAddress} (جدول ARP: {arpEntry.EntryType})";
+        }
+
+        if (request.ResolveNetworkOwner)
+        {
+            var owner = await _intel.LookupAsync(ev.IpAddress, CancellationToken.None).ConfigureAwait(false);
+            device.ReverseDns = owner.ReverseDns;
+            device.AsNumber = owner.AsNumber;
+            device.AsName = owner.AsName;
+            device.NetworkName = owner.NetworkName;
+            device.NetworkCountry = owner.Country;
+            device.NetworkRegistrant = owner.Registrant;
+            device.PrefixCidr = owner.PrefixCidr;
+            device.IntelSource = owner.QueryStatus;
+            device.IntelQueriedAt = owner.QueriedAt.ToString("yyyy-MM-dd HH:mm:ss");
+            device.ISP = owner.AsName;
+            device.OperatorName = owner.Registrant;
+            if (owner.QueryStatus == "موفق" && owner.RawResponse.Length > 0)
+                device.EvidenceHash = MinerFingerprintService.Sha256Hex(
+                    device.EvidenceHash + "|" + owner.PayloadHash);
+        }
+
+        return device;
+    }
+
+    /// <summary>گسترش اهداف: آدرس تکی، بازه (a.b.c.d-e.f.g.h)، یا محدوده CIDR.</summary>
+    public List<string> ExpandTargets(IEnumerable<string> raw, out List<string> warnings)
+    {
+        var result = new List<string>();
+        warnings = new List<string>();
+
+        foreach (var entry in raw)
+        {
+            var text = entry.Trim();
+            if (text.Length == 0 || text.StartsWith('#')) continue;
+
+            if (text.Contains('/'))
+            {
+                var parts = text.Split('/', 2);
+                if (IPAddress.TryParse(parts[0], out var baseAddr) &&
+                    int.TryParse(parts[1], out var prefix) && prefix is >= 0 and <= 32)
+                {
+                    result.AddRange(ExpandCidr(baseAddr, prefix));
+                }
+                else warnings.Add($"محدوده نامعتبر نادیده گرفته شد: {text}");
+                continue;
+            }
+
+            if (text.Contains('-') && text.Count(c => c == '.') == 6)
+            {
+                var parts = text.Split('-', 2);
+                if (IPAddress.TryParse(parts[0].Trim(), out var from) &&
+                    IPAddress.TryParse(parts[1].Trim(), out var to))
+                {
+                    result.AddRange(ExpandRange(from, to));
+                }
+                else warnings.Add($"بازه نامعتبر نادیده گرفته شد: {text}");
+                continue;
+            }
+
+            if (IPAddress.TryParse(text, out var single))
+                result.Add(single.ToString());
+            else
+                warnings.Add($"آدرس نامعتبر نادیده گرفته شد: {text}");
+        }
+
+        var unique = result.Distinct().ToList();
+        if (unique.Count > MaxTargets)
+        {
+            warnings.Add($"تعداد اهداف از {MaxTargets} بیشتر شد و به همین تعداد محدود گردید.");
+            unique = unique.Take(MaxTargets).ToList();
+        }
+        return unique;
+    }
+
+    private static IEnumerable<string> ExpandCidr(IPAddress baseAddress, int prefix)
+    {
+        var bytes = baseAddress.GetAddressBytes();
+        uint value = 0;
+        foreach (var b in bytes) value = (value << 8) | b;
+
+        var mask = prefix == 0 ? 0u : uint.MaxValue << (32 - prefix);
+        var network = value & mask;
+        var size = (long)Math.Pow(2, 32 - prefix);
+        size = Math.Min(size, MaxTargets);
+
+        for (long i = 0; i < size; i++)
+        {
+            var current = network + (uint)i;
+            yield return $"{(current >> 24) & 0xFF}.{(current >> 16) & 0xFF}.{(current >> 8) & 0xFF}.{current & 0xFF}";
+        }
+    }
+
+    private static IEnumerable<string> ExpandRange(IPAddress from, IPAddress to)
+    {
+        var a = from.GetAddressBytes();
+        var b = to.GetAddressBytes();
+        long start = 0, end = 0;
+        for (int i = 0; i < 4; i++)
+        {
+            start = (start << 8) | a[i];
+            end = (end << 8) | b[i];
+        }
+        if (end < start) (start, end) = (end, start);
+        var count = Math.Min(end - start + 1, MaxTargets);
+        for (long i = 0; i < count; i++)
+        {
+            var current = start + i;
+            yield return $"{(current >> 24) & 0xFF}.{(current >> 16) & 0xFF}.{(current >> 8) & 0xFF}.{current & 0xFF}";
+        }
+    }
+
+    private static string BuildScanNotes(
+        int ipCount, int portCount, int closed, int filtered, int errors, int intelFailures,
+        List<string> warnings)
+    {
+        var parts = new List<string>
+        {
+            $"پورت‌های بررسی‌شده: {portCount} برای هر آدرس",
+            $"پاسخ‌های بسته: {closed}",
+            $"پاسخ‌های فیلترشده/نامشخص: {filtered}",
+            $"خطاهای شبکه: {errors}"
+        };
+        if (intelFailures > 0) parts.Add($"استعلام‌های ناموفق شبکه: {intelFailures}");
+        if (warnings.Count > 0) parts.Add("هشدارها: " + string.Join(" | ", warnings));
+        return string.Join(" | ", parts);
+    }
+
+    /// <summary>آدرس‌ها و محدوده‌های واقعی همین رایانه برای پروب شبکه محلی.</summary>
+    public static List<(string Address, string Cidr)> GetLocalSubnets()
+    {
+        var result = new List<(string, string)>();
         try
         {
-            using var client = new TcpClient();
-            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            linked.CancelAfter(timeoutMs);
-            await client.ConnectAsync(ip, port, linked.Token);
-            return client.Connected;
+            foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (ni.OperationalStatus != OperationalStatus.Up) continue;
+                if (ni.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
+                foreach (var ua in ni.GetIPProperties().UnicastAddresses)
+                {
+                    if (ua.Address.AddressFamily != AddressFamily.InterNetwork) continue;
+                    var mask = ua.IPv4Mask;
+                    if (mask == null) continue;
+                    result.Add(($"{ua.Address}/{MaskToPrefix(mask)}", ni.Name));
+                }
+            }
         }
-        catch
+        catch (Exception)
         {
-            return false;
+            // خواندن اطلاعات کارت شبکه ممکن است در برخی محیط‌ها ممکن نباشد
         }
+        return result;
     }
 
-    private static List<string> GetLocalIpv4Addresses()
+    private static int MaskToPrefix(IPAddress mask)
+    {
+        int prefix = 0;
+        foreach (var bit in mask.GetAddressBytes())
+        {
+            for (int i = 7; i >= 0; i--)
+            {
+                if ((bit & (1 << i)) != 0) prefix++;
+            }
+        }
+        return prefix;
+    }
+
+    public static List<string> GetLocalIPv4Addresses()
     {
         var list = new List<string> { "127.0.0.1" };
         try
@@ -196,19 +457,20 @@ public sealed class TrackingService
                 if (ni.OperationalStatus != OperationalStatus.Up) continue;
                 foreach (var ua in ni.GetIPProperties().UnicastAddresses)
                 {
-                    if (ua.Address.AddressFamily == AddressFamily.InterNetwork)
-                    {
-                        var s = ua.Address.ToString();
-                        if (!list.Contains(s)) list.Add(s);
-                    }
+                    if (ua.Address.AddressFamily != AddressFamily.InterNetwork) continue;
+                    var text = ua.Address.ToString();
+                    if (!list.Contains(text)) list.Add(text);
                 }
             }
         }
-        catch { /* ignore */ }
+        catch (Exception)
+        {
+            // بی‌اثر
+        }
         return list;
     }
 
-    private void Report(int current, int total, int found, string message)
+    private void Report(int current, int total, int found, int identified, double elapsed, string message)
     {
         var pct = total <= 0 ? 0 : (int)Math.Min(100, current * 100.0 / total);
         ProgressChanged?.Invoke(this, new ScanProgressEventArgs
@@ -216,7 +478,10 @@ public sealed class TrackingService
             Percent = pct,
             Message = message,
             Found = found,
-            Scanned = current
+            Probed = current,
+            Total = total,
+            Identified = identified,
+            ElapsedSeconds = Math.Round(elapsed, 1)
         });
     }
 }

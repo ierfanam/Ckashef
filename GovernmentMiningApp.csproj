@@ -6,16 +6,18 @@
     <Nullable>enable</Nullable>
     <UseWindowsForms>true</UseWindowsForms>
     <ImplicitUsings>enable</ImplicitUsings>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ApplicationIcon />
-    <AssemblyName>برنامه قانونی و مجوزدار سفارشی دولت</AssemblyName>
+    <AssemblyName>سامانه ردیابی دستگاه‌های ماینر</AssemblyName>
     <RootNamespace>GovernmentMiningApp</RootNamespace>
-    <Version>1.0.0</Version>
-    <Product>برنامه قانونی و مجوزدار سفارشی دولت</Product>
-    <Description>سیستم مدیریت عملیات ردیابی و ثبت دستگاه‌های ماینر — نسخه دولتی</Description>
-    <Company>Government Authorized Edition</Company>
+    <Version>2.0.0</Version>
+    <Product>سامانه ردیابی دستگاه‌های ماینر</Product>
+    <Description>سامانه ثبت و پیگیری عملیات پروب مجاز دستگاه‌های ماینر — مبتنی بر داده‌های واقعی</Description>
+    <Company>Ministry-Affiliated Engineering Unit</Company>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ForceDesignerDpiUnaware>false</ForceDesignerDpiUnaware>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
