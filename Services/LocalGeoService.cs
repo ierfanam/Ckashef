@@ -79,7 +79,7 @@ public sealed class LocalGeoService
         {
             IPAddress = record.IPAddress,
             QueriedAt = DateTime.Now,
-            QueryStatus = "موفق", // status از ip-api
+            QueryStatus = "موفق",
             GeoLat = record.Lat,
             GeoLon = record.Lon,
             GeoCity = record.City,
@@ -88,7 +88,8 @@ public sealed class LocalGeoService
             GeoISP = record.ISP,
             GeoOrg = record.Org,
             GeoTimezone = record.Timezone,
-            GeoQueriedAt = record.QueriedAt
+            GeoQueryStatus = "موفق",
+            GeoQueriedAt = DateTime.Now
         };
         db.SaveOwnership(ownership);
     }

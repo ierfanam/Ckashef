@@ -834,13 +834,14 @@ VALUES (@id,@op,@t,@o,@m,@s,@e,@ips,@pp,@df,@idn,@cl,@fl,@el,@n)";
 
     // ---------- مالکیت شبکه ----------
 
-    public NetworkOwnership? GetCachedOwnership(string ip)
+public NetworkOwnership? GetCachedOwnership(string ip)
     {
         using var conn = Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"SELECT IPAddress, PrefixCidr, AsNumber, AsName, NetworkName, Registrant, Country,
- ReverseDns, Source, SourceUrl, RawResponse, PayloadHash, QueryStatus, QueriedAt
- FROM NetworkOwnership WHERE IPAddress = @ip";
+  ReverseDns, Source, SourceUrl, RawResponse, PayloadHash, QueryStatus, QueriedAt,
+  GeoLat, GeoLon, GeoCity, GeoRegion, GeoCountry, GeoISP, GeoOrg, GeoTimezone, GeoQueryStatus, GeoQueriedAt
+  FROM NetworkOwnership WHERE IPAddress = @ip";
         P(cmd, "@ip", ip);
         using var r = cmd.ExecuteReader();
         if (!r.Read()) return null;
@@ -859,18 +860,29 @@ VALUES (@id,@op,@t,@o,@m,@s,@e,@ips,@pp,@df,@idn,@cl,@fl,@el,@n)";
             RawResponse = Str(r, 10),
             PayloadHash = Str(r, 11),
             QueryStatus = Str(r, 12),
-            QueriedAt = ParseDate(r[13])
+            QueriedAt = ParseDate(r[13]),
+            GeoLat = DblOrNull(r, "GeoLat"),
+            GeoLon = DblOrNull(r, "GeoLon"),
+            GeoCity = Str(r, "GeoCity"),
+            GeoRegion = Str(r, "GeoRegion"),
+            GeoCountry = Str(r, "GeoCountry"),
+            GeoISP = Str(r, "GeoISP"),
+            GeoOrg = Str(r, "GeoOrg"),
+            GeoTimezone = Str(r, "GeoTimezone"),
+            GeoQueryStatus = Str(r, "GeoQueryStatus"),
+            GeoQueriedAt = ParseDateOrNull(r["GeoQueriedAt"])
         };
     }
 
-    public void SaveOwnership(NetworkOwnership o)
+public void SaveOwnership(NetworkOwnership o)
     {
         using var conn = Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"INSERT OR REPLACE INTO NetworkOwnership
  (IPAddress, PrefixCidr, AsNumber, AsName, NetworkName, Registrant, Country, ReverseDns, Source, SourceUrl,
-  RawResponse, PayloadHash, QueryStatus, QueriedAt)
-VALUES (@ip,@p,@asn,@asname,@net,@reg,@country,@rdns,@src,@url,@raw,@hash,@st,@at)";
+   RawResponse, PayloadHash, QueryStatus, QueriedAt, GeoLat, GeoLon, GeoCity, GeoRegion, GeoCountry, GeoISP, GeoOrg, GeoTimezone, GeoQueryStatus, GeoQueriedAt)
+ VALUES (@ip,@p,@asn,@asname,@net,@reg,@country,@rdns,@src,@url,@raw,@hash,@st,@at,
+   @gLat,@gLon,@gCity,@gRegion,@gCountry,@gISP,@gOrg,@gTz,@gQStatus,@gQAt)";
         P(cmd, "@ip", o.IPAddress);
         P(cmd, "@p", o.PrefixCidr);
         P(cmd, "@asn", o.AsNumber);
@@ -885,6 +897,16 @@ VALUES (@ip,@p,@asn,@asname,@net,@reg,@country,@rdns,@src,@url,@raw,@hash,@st,@a
         P(cmd, "@hash", o.PayloadHash);
         P(cmd, "@st", o.QueryStatus);
         P(cmd, "@at", o.QueriedAt.ToString("yyyy-MM-ddTHH:mm:sszzz", CultureInfo.InvariantCulture));
+        P(cmd, "@gLat", o.GeoLat);
+        P(cmd, "@gLon", o.GeoLon);
+        P(cmd, "@gCity", o.GeoCity);
+        P(cmd, "@gRegion", o.GeoRegion);
+        P(cmd, "@gCountry", o.GeoCountry);
+        P(cmd, "@gISP", o.GeoISP);
+        P(cmd, "@gOrg", o.GeoOrg);
+        P(cmd, "@gTz", o.GeoTimezone);
+        P(cmd, "@gQStatus", o.GeoQueryStatus);
+        P(cmd, "@gQAt", o.GeoQueriedAt?.ToString("yyyy-MM-ddTHH:mm:sszzz", CultureInfo.InvariantCulture) ?? (object?)DBNull.Value);
         cmd.ExecuteNonQuery();
     }
 
