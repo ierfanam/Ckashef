@@ -1,17 +1,52 @@
 {
   "version": 2,
-  "dgSpecHash": "iuu1qTM6hB8=",
+  "dgSpecHash": "GwgUOOwNzbBlKjoPeq2aRba/oc3dtbyHe3RSjJjR4MNTDPoipvEaCiDXB3evqn5/Ca2nS3XKI7Rrs/wkzvt9aw==",
   "success": true,
   "projectFilePath": "/workspace/83784cfc-6f25-4906-bb72-b4391899c2cd/sessions/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/GovernmentMiningApp.csproj",
   "expectedPackageFiles": [
+    "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/gmap.net.core/1.9.6/gmap.net.core.1.9.6.nupkg.sha512",
+    "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/gmap.net.windowsforms/1.7.5/gmap.net.windowsforms.1.7.5.nupkg.sha512",
     "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/microsoft.data.sqlite/8.0.11/microsoft.data.sqlite.8.0.11.nupkg.sha512",
     "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/microsoft.data.sqlite.core/8.0.11/microsoft.data.sqlite.core.8.0.11.nupkg.sha512",
+    "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/microsoft.netcore.platforms/3.0.0/microsoft.netcore.platforms.3.0.0.nupkg.sha512",
+    "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/microsoft.win32.registry/4.6.0/microsoft.win32.registry.4.6.0.nupkg.sha512",
+    "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/newtonsoft.json/12.0.3/newtonsoft.json.12.0.3.nupkg.sha512",
+    "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/runtime.native.system.data.sqlclient.sni/4.6.0/runtime.native.system.data.sqlclient.sni.4.6.0.nupkg.sha512",
+    "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/runtime.win-arm64.runtime.native.system.data.sqlclient.sni/4.4.0/runtime.win-arm64.runtime.native.system.data.sqlclient.sni.4.4.0.nupkg.sha512",
+    "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/runtime.win-x64.runtime.native.system.data.sqlclient.sni/4.4.0/runtime.win-x64.runtime.native.system.data.sqlclient.sni.4.4.0.nupkg.sha512",
+    "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/runtime.win-x86.runtime.native.system.data.sqlclient.sni/4.4.0/runtime.win-x86.runtime.native.system.data.sqlclient.sni.4.4.0.nupkg.sha512",
     "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/sqlitepclraw.bundle_e_sqlite3/2.1.6/sqlitepclraw.bundle_e_sqlite3.2.1.6.nupkg.sha512",
     "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/sqlitepclraw.core/2.1.6/sqlitepclraw.core.2.1.6.nupkg.sha512",
     "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/sqlitepclraw.lib.e_sqlite3/2.1.6/sqlitepclraw.lib.e_sqlite3.2.1.6.nupkg.sha512",
     "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/sqlitepclraw.provider.e_sqlite3/2.1.6/sqlitepclraw.provider.e_sqlite3.2.1.6.nupkg.sha512",
+    "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/system.data.sqlclient/4.7.0/system.data.sqlclient.4.7.0.nupkg.sha512",
+    "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/system.data.sqlite/1.0.112/system.data.sqlite.1.0.112.nupkg.sha512",
+    "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/system.data.sqlite.core/1.0.112/system.data.sqlite.core.1.0.112.nupkg.sha512",
     "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/system.memory/4.5.3/system.memory.4.5.3.nupkg.sha512",
+    "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/system.security.accesscontrol/4.6.0/system.security.accesscontrol.4.6.0.nupkg.sha512",
+    "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/system.security.principal.windows/4.6.0/system.security.principal.windows.4.6.0.nupkg.sha512",
     "/home/agent_d54993b6-aa2f-4504-a820-9d249beaf4fa/.nuget/packages/microsoft.windowsdesktop.app.ref/8.0.31/microsoft.windowsdesktop.app.ref.8.0.31.nupkg.sha512"
   ],
-  "logs": []
+  "logs": [
+    {
+      "code": "NU1603",
+      "level": "Warning",
+      "warningLevel": 1,
+      "message": "سامانه ردیابی دستگاه‌های ماینر depends on GMap.NET.Core (>= 1.7.5) but GMap.NET.Core 1.7.5 was not found. An approximate best match of GMap.NET.Core 1.9.6 was resolved.",
+      "libraryId": "GMap.NET.Core",
+      "targetGraphs": [
+        "net8.0-windows7.0"
+      ]
+    },
+    {
+      "code": "NU1701",
+      "level": "Warning",
+      "warningLevel": 1,
+      "message": "Package 'GMap.NET.WindowsForms 1.7.5' was restored using '.NETFramework,Version=v4.6.1, .NETFramework,Version=v4.6.2, .NETFramework,Version=v4.7, .NETFramework,Version=v4.7.1, .NETFramework,Version=v4.7.2, .NETFramework,Version=v4.8, .NETFramework,Version=v4.8.1' instead of the project target framework 'net8.0-windows7.0'. This package may not be fully compatible with your project.",
+      "libraryId": "GMap.NET.WindowsForms",
+      "targetGraphs": [
+        "net8.0-windows7.0"
+      ]
+    }
+  ]
 }

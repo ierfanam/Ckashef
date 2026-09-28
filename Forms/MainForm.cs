@@ -95,7 +95,7 @@ public sealed class MainForm : Form
         string[] items =
         {
             "داشبورد", "عملیات", "شناسایی‌ها", "پروب مجاز", "تاریخچه پروب",
-            "گزارش‌ها", "پرسنل", "حسابرسی", "تنظیمات"
+            "گزارش‌ها", "پرسنل", "حسابرسی", "تنظیمات", "نقشه"
         };
         int y = 10;
         foreach (var item in items)
@@ -150,6 +150,7 @@ public sealed class MainForm : Form
             case "پرسنل": ShowPersonnel(); break;
             case "حسابرسی": ShowAudit(); break;
             case "تنظیمات": ShowSettings(); break;
+            case "نقشه": ShowMap(); break;
         }
     }
 
@@ -1228,7 +1229,7 @@ public sealed class MainForm : Form
 
     // ─────────────────────────── تنظیمات ───────────────────────────
 
-    private void ShowSettings()
+private void ShowSettings()
     {
         ClearContent();
         var subnets = TrackingService.GetLocalSubnets();
@@ -1246,20 +1247,177 @@ public sealed class MainForm : Form
                 "پلتفرم: Windows Forms / .NET 8\r\n\r\n" +
                 $"مسیر پایگاه داده:\r\n{_db.DatabasePath}\r\n\r\n" +
                 $"مسیر اجرا:\r\n{AppDomain.CurrentDomain.BaseDirectory}\r\n\r\n" +
-                $"رایانه اجرایی:\r\n{Environment.MachineName}\r\n\r\n" +
+                $"رایانه اجرا:\r\n{Environment.MachineName}\r\n\r\n" +
                 "اصول کاری سامانه:\r\n" +
                 "• هیچ داده ساختگی، نمونه یا شبیه‌سازی‌شده‌ای تولید نمی‌شود.\r\n" +
                 "• هر شناسایی حاصل اتصال TCP واقعی و تحلیل پاسخ واقعی همان دستگاه است.\r\n" +
                 "• مالکیت شبکه تنها از RDAP و RIPE Stat و PTR سیستم‌عامل خوانده می‌شود.\r\n" +
                 "• اطلاعات مشترک تنها از پاسخ رسمی اپراتور ثبت و به سند استعلام پیوند می‌خورد.\r\n" +
-                "• توان مصرفی تنها در صورتی ثبت می‌شود که دستگاه آن را اعلام کرده باشد.\r\n" +
-                "• هر سند دارای اثر انگشت SHA-256 و زنجیره حسابرسی تغییرناپذیر است.\r\n\r\n" +
+                "• توان مصرفی تنها در صورتی ثبت می‌شود که دستگاه آن را اعلام کرده باشد.\r\n\r\n" +
                 $"محدوده‌های شبکه این رایانه:\r\n{string.Join(Environment.NewLine, subnets.Select(s => $"    {s.Address}    (کارت: {s.Cidr})"))}\r\n\r\n" +
                 "سطوح دسترسی:\r\n" +
                 "    1: مشاهده    2: پروب محلی و پروب مجدد    3: اجرای پروب    4: ثبت اقدام    5: مدیریت پرسنل\r\n"
         };
         _content.Controls.Add(info);
         _content.Controls.Add(PageTitle("تنظیمات و شناسنامه سامانه"));
+    }
+
+    // ─────────────────────────── نقشه ───────────────────────────
+
+    private void ShowMap()
+    {
+        ClearContent();
+        var header = new Label
+        {
+            Text = "نقشه موقعیت جغرافیایی دستگاه‌های شناسایی‌شده",
+            Dock = DockStyle.Top,
+            Height = 40,
+            Font = UiTheme.TitleFont,
+            ForeColor = UiTheme.Primary,
+            TextAlign = ContentAlignment.MiddleRight
+        };
+
+        var mapPanel = new GMapControl.GMapControl
+        {
+            Dock = DockStyle.Fill,
+            MapsMode = GMap.NET.AccessMode.ServerAndCache,
+            MinZoom = 0,
+            MaxZoom = 24,
+            Zoom = 2,
+            CenterPosition = new PointLatLng(32.0, 53.0), // ایران approximate
+            CanDragMap = true,
+            ShowTileGrid = false
+        };
+
+        // Add markers for detected devices with geo data
+        var devices = _db.GetDetections().Where(d =>
+            d.NetworkCountry != null && d.NetworkCountry != "" &&
+            d.IPAddress != null && d.IPAddress != ""
+        ).ToList();
+
+        foreach (var device in devices)
+        {
+            double? lat = device.LocationLatitude;
+            double? lon = device.LocationLongitude;
+
+            // Use stored geo data if available, otherwise fall back to IP geolocation
+            if (!lat.HasValue || !lon.HasValue)
+            {
+                // Try to get geo data from NetworkOwnership lookup
+                var ownership = _db.GetCachedOwnership(device.IPAddress);
+                if (ownership != null && ownership.GeoLat.HasValue && ownership.GeoLon.HasValue)
+                {
+                    lat = ownership.GeoLat.Value;
+                    lon = ownership.GeoLon.Value;
+                }
+            }
+
+            if (lat.HasValue && lon.HasValue)
+            {
+                var marker = new GMap.NET.WindowsForms.GMarkerGoogle(
+                    new GMap.NET.PointLatLng(lat.Value, lon.Value),
+                    GMap.NET.WindowsForms.GMarkerGoogleType.red);
+                marker.ToolTipText = $"{device.IPAddress}:{device.Port}\n{device.SoftwareName}";
+                marker.ToolTipMode = GMap.NET.WindowsForms.ToolTipMode.Never;
+                map markers.Add(marker);
+            }
+            else
+            {
+                // Add marker with unknown location
+                var marker = new GMap.NET.WindowsForms.GMarkerGoogle(
+                    new GMap.NET.PointLatLng(0, 0),
+                    GMap.NET.WindowsForms.GMarkerGoogleType.red);
+                marker.ToolTipText = $"{device.IPAddress}:{device.Port} - بدون اطلاعات جغرافیایی";
+                marker.ToolTipMode = GMap.NET.WindowsForms.ToolTipMode.Never;
+                map markers.Add(marker);
+            }
+        }
+
+        // Center map on markers if any exist
+        if (map markers.Count > 0)
+        {
+            double minLat = double.MaxValue, maxLat = double.MinValue;
+            double minLon = double.MaxValue, maxLon = double.MinValue;
+
+            foreach (var marker in map markers)
+            {
+                var pos = marker.Position;
+                minLat = Math.Min(minLat, pos.Lat);
+                maxLat = Math.Max(maxLat, pos.Lat);
+                minLon = Math.Min(minLon, pos.Lng);
+                maxLon = Math.Max(maxLon, pos.Lng);
+            }
+
+            double centerLat = (minLat + maxLat) / 2;
+            double centerLon = (minLon + maxLon) / 2;
+            mapPanel.Position = new GMap.NET.PointLatLng(centerLat, centerLon);
+            mapPanel.Zoom = 4;
+        }
+
+        // Add zoom controls
+        var zoomInBtn = new Button { Text = "+", Left = 10, Top = 10, Width = 30, Height = 30 };
+        var zoomOutBtn = new Button { Text = "-", Left = 50, Top = 10, Width = 30, Height = 30 };
+        UiTheme.StylePrimaryButton(zoomInBtn);
+        UiTheme.StyleSecondaryButton(zoomOutBtn);
+
+        zoomInBtn.Click += (_, _) => mapPanel.Zoom++;
+        zoomOutBtn.Click += (_, _) => mapPanel.Zoom--;
+
+        var legendPanel = new Panel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 80,
+            BackColor = Color.FromArgb(40, 45, 50),
+            Padding = new Padding(8)
+        };
+
+        var legendTitle = new Label
+        {
+            Text = "هموارکنмоکس",
+            Dock = DockStyle.Top,
+            Height = 24,
+            ForeColor = Color.White,
+            Font = UiTheme.BodyFont,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+
+        var legendItems = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false
+        };
+
+        // Legend item: IP device
+        var ipMarker = new Label
+        {
+            Text = "☰ آ دستگاه IP",
+            ForeColor = Color.White,
+            Font = new Font("Segoe UI", 9f),
+            AutoSize = true,
+            Margin = new Padding(10, 0, 0, 0)
+        };
+        // Legend item: Unknown location
+        var unknownMarker = new Label
+        {
+            Text = "⚠ دستگاه بدون geo data",
+            ForeColor = Color.LightGray,
+            Font = new Font("Segoe UI", 9f),
+            AutoSize = true,
+            Margin = new Padding(10, 0, 0, 0)
+        };
+
+        legendItems.Controls.Add(ipMarker);
+        legendItems.Controls.Add(unknownMarker);
+        legendPanel.Controls.Add(legendTitle);
+        legendPanel.Controls.Add(legendItems);
+
+        _content.Controls.Add(header);
+        _content.Controls.Add(mapPanel);
+        _content.Controls.Add(zoomInBtn);
+        _content.Controls.Add(zoomOutBtn);
+        _content.Controls.Add(legendPanel);
+        SetStatus($"نمایش {map markers.Count} دستگاه روی نقشه");
     }
 
     private static Label PageTitle(string text) => new()
