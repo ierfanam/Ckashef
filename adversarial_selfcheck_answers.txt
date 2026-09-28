@@ -1,0 +1,31 @@
+# Adversarial self-check: committed answers, written BEFORE any key was computed.
+# Procedural commitment only (same context, not cryptographically blind).
+# Format: item_id<TAB>answer
+
+Q01	5.551115123125783e-17
+Q02	301
+Q03	24
+Q04	2
+Q05	8/15
+Q06	NO_SOLUTION
+Q07	23
+Q08	44
+Q09	4
+Q10	24
+Q11	132
+Q12	31
+Q13	4
+Q14	2/3
+Q15	1/2
+Q16	1/3
+Q17	0.3411672
+Q18	VALID
+Q19	500500
+Q20	34650
+Q21	16
+Q22	400
+Q23	7919
+Q24	30
+Q25	249
+Q26	False
+Q27	0.581981
