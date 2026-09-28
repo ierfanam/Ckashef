@@ -128,7 +128,17 @@ CREATE TABLE IF NOT EXISTS NetworkOwnership (
     RawResponse TEXT,
     PayloadHash TEXT,
     QueryStatus TEXT,
-    QueriedAt TEXT NOT NULL
+    QueriedAt TEXT NOT NULL,
+    GeoLat REAL,
+    GeoLon REAL,
+    GeoCity TEXT,
+    GeoRegion TEXT,
+    GeoCountry TEXT,
+    GeoISP TEXT,
+    GeoOrg TEXT,
+    GeoTimezone TEXT,
+    GeoQueryStatus TEXT,
+    GeoQueriedAt TEXT
 );
 
 -- زنجیره حسابرسی تغییرناپذیر (هش زنجیره‌ای)

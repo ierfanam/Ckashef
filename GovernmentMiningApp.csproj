@@ -22,6 +22,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.11" />
+    <PackageReference Include="GMap.NET.Core" Version="2.0.0" />
+    <PackageReference Include="GMap.NET.WindowsForms" Version="2.0.0" />
   </ItemGroup>
 
   <ItemGroup>

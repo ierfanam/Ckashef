@@ -160,7 +160,17 @@ VALUES (@id, @name, @dept, @role, @badge, @pass, 5, 1, 1)";
             ("ScanHistory", "IdentifiedDevices", "INTEGER DEFAULT 0"),
             ("ScanHistory", "ClosedPorts", "INTEGER DEFAULT 0"),
             ("ScanHistory", "FilteredPorts", "INTEGER DEFAULT 0"),
-            ("ScanHistory", "ElapsedSeconds", "REAL")
+            ("ScanHistory", "ElapsedSeconds", "REAL"),
+            ("NetworkOwnership", "GeoLat", "REAL"),
+            ("NetworkOwnership", "GeoLon", "REAL"),
+            ("NetworkOwnership", "GeoCity", "TEXT"),
+            ("NetworkOwnership", "GeoRegion", "TEXT"),
+            ("NetworkOwnership", "GeoCountry", "TEXT"),
+            ("NetworkOwnership", "GeoISP", "TEXT"),
+            ("NetworkOwnership", "GeoOrg", "TEXT"),
+            ("NetworkOwnership", "GeoTimezone", "TEXT"),
+            ("NetworkOwnership", "GeoQueryStatus", "TEXT"),
+            ("NetworkOwnership", "GeoQueriedAt", "TEXT")
         };
 
         foreach (var (table, column, definition) in additions)

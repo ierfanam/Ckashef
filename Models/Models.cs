@@ -145,6 +145,18 @@ public class NetworkOwnership
     public string PayloadHash { get; set; } = "";
     public string QueryStatus { get; set; } = "";
     public DateTime QueriedAt { get; set; }
+
+    // جغرافیای واقعی IP از سرویس عمومی بدون کلید
+    public double? GeoLat { get; set; }
+    public double? GeoLon { get; set; }
+    public string GeoCity { get; set; } = "";
+    public string GeoRegion { get; set; } = "";
+    public string GeoCountry { get; set; } = "";
+    public string GeoISP { get; set; } = "";
+    public string GeoOrg { get; set; } = "";
+    public string GeoTimezone { get; set; } = "";
+    public string GeoQueryStatus { get; set; } = "";
+    public DateTime? GeoQueriedAt { get; set; }
 }
 
 public class ScanHistoryEntry
